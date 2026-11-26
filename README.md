@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="commentarium_logo.svg" width="96" alt="CommentariuM logo">
-</p>
-
 <h1 align="center">CommentariuM</h1>
 
 <p align="center">
@@ -118,5 +114,4 @@ The **About** dialog lists every feature and keyboard shortcut.
 ## Example worksheets
 
 - `CommentariuM feature tour.cmm.json`: a one-page tour of the main features.
-- `finned heat exchanger model.json`
 - `curve fitting to data.json`
