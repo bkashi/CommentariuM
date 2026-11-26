@@ -11,11 +11,6 @@ CommentariuM is a desktop worksheet in the spirit of SMath Studio and Mathcad, w
 You type math in a 2D editor anywhere on the page. The whole sheet recalculates from top to bottom as you edit.
 Text, tables, plots, pictures and drawings sit next to the calculations, so one page holds the full calculation note.
 
-<p align="center">
-  <img src="docs/feature-tour.png" width="640" alt="One-page feature tour worksheet">
-  <br><em>The feature tour worksheet (<code>CommentariuM feature tour.cmm.json</code>) exported to PDF</em>
-</p>
-
 ## Features
 
 ### Math
