@@ -1,0 +1,974 @@
+{
+  "version": 1,
+  "theme": "light",
+  "show_grid": true,
+  "zoom": 1.0,
+  "num_pages": 1,
+  "boxes": [
+    {
+      "type": "text",
+      "x": 40,
+      "y": 30,
+      "style": "title",
+      "text": "CommentariuM — Feature Tour"
+    },
+    {
+      "type": "text",
+      "x": 40,
+      "y": 100,
+      "style": "subtitle",
+      "text": "A live engineering worksheet: 2D math, units, solver, tables, plots and drawings"
+    },
+    {
+      "type": "text",
+      "x": 40,
+      "y": 150,
+      "style": "heading1",
+      "text": "Live math with units"
+    },
+    {
+      "type": "text",
+      "x": 60,
+      "y": 190,
+      "style": "normal",
+      "text": "Type ' before a unit (5'kW). A unit after the final '=' sets how the result is shown."
+    },
+    {
+      "type": "math",
+      "x": 60,
+      "y": 230,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "P"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "2"
+        },
+        {
+          "t": "char",
+          "v": "."
+        },
+        {
+          "t": "char",
+          "v": "5"
+        },
+        {
+          "t": "unit",
+          "v": "kW"
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 420,
+      "y": 230,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "m"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "5"
+        },
+        {
+          "t": "char",
+          "v": "0"
+        },
+        {
+          "t": "unit",
+          "v": "kg"
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 60,
+      "y": 270,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "t"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "9"
+        },
+        {
+          "t": "char",
+          "v": "0"
+        },
+        {
+          "t": "unit",
+          "v": "min"
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 420,
+      "y": 270,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "c"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "p"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "c"
+        },
+        {
+          "t": "char",
+          "v": "p"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "w"
+            },
+            {
+              "t": "char",
+              "v": "a"
+            },
+            {
+              "t": "char",
+              "v": "t"
+            },
+            {
+              "t": "char",
+              "v": "e"
+            },
+            {
+              "t": "char",
+              "v": "r"
+            }
+          ]
+        },
+        {
+          "t": "paren",
+          "in": [
+            {
+              "t": "char",
+              "v": "3"
+            },
+            {
+              "t": "char",
+              "v": "0"
+            },
+            {
+              "t": "char",
+              "v": "0"
+            },
+            {
+              "t": "unit",
+              "v": "K"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 60,
+      "y": 320,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "E"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "P"
+        },
+        {
+          "t": "char",
+          "v": "·"
+        },
+        {
+          "t": "char",
+          "v": "t"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "unit",
+          "v": "kWh"
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 420,
+      "y": 320,
+      "decimals": 2,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "Q"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "m"
+        },
+        {
+          "t": "char",
+          "v": "·"
+        },
+        {
+          "t": "char",
+          "v": "c"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "p"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "·"
+        },
+        {
+          "t": "char",
+          "v": "1"
+        },
+        {
+          "t": "char",
+          "v": "5"
+        },
+        {
+          "t": "unit",
+          "v": "K"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "unit",
+          "v": "MJ"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "x": 40,
+      "y": 380,
+      "style": "heading1",
+      "text": "Equations and the solver"
+    },
+    {
+      "type": "text",
+      "x": 60,
+      "y": 420,
+      "style": "normal",
+      "text": "Write an equation with '==', right-click → Solve for. Units convert on the fly."
+    },
+    {
+      "type": "math",
+      "x": 290,
+      "y": 460,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "q"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "frac",
+          "num": [
+            {
+              "t": "char",
+              "v": "6"
+            },
+            {
+              "t": "char",
+              "v": "0"
+            },
+            {
+              "t": "char",
+              "v": "0"
+            },
+            {
+              "t": "unit",
+              "v": "W"
+            }
+          ],
+          "den": [
+            {
+              "t": "unit",
+              "v": "m"
+            },
+            {
+              "t": "sup",
+              "exp": [
+                {
+                  "t": "char",
+                  "v": "2"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 430,
+      "y": 460,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "h"
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "frac",
+          "num": [
+            {
+              "t": "char",
+              "v": "2"
+            },
+            {
+              "t": "char",
+              "v": "5"
+            },
+            {
+              "t": "unit",
+              "v": "W"
+            }
+          ],
+          "den": [
+            {
+              "t": "paren",
+              "in": [
+                {
+                  "t": "unit",
+                  "v": "m"
+                },
+                {
+                  "t": "sup",
+                  "exp": [
+                    {
+                      "t": "char",
+                      "v": "2"
+                    }
+                  ]
+                },
+                {
+                  "t": "char",
+                  "v": "·"
+                },
+                {
+                  "t": "unit",
+                  "v": "K"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 610,
+      "y": 470,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "T"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "a"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "2"
+        },
+        {
+          "t": "char",
+          "v": "0"
+        },
+        {
+          "t": "unit",
+          "v": "°C"
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 60,
+      "y": 460,
+      "decimals": null,
+      "boxed": true,
+      "ast": [
+        {
+          "t": "char",
+          "v": "q"
+        },
+        {
+          "t": "char",
+          "v": "=="
+        },
+        {
+          "t": "char",
+          "v": "h"
+        },
+        {
+          "t": "char",
+          "v": "·"
+        },
+        {
+          "t": "paren",
+          "in": [
+            {
+              "t": "char",
+              "v": "T"
+            },
+            {
+              "t": "sub",
+              "sub": [
+                {
+                  "t": "char",
+                  "v": "s"
+                }
+              ]
+            },
+            {
+              "t": "char",
+              "v": "-"
+            },
+            {
+              "t": "char",
+              "v": "T"
+            },
+            {
+              "t": "sub",
+              "sub": [
+                {
+                  "t": "char",
+                  "v": "a"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 60,
+      "y": 520,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "T"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "s"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "T"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "a"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "+"
+        },
+        {
+          "t": "frac",
+          "num": [
+            {
+              "t": "char",
+              "v": "q"
+            }
+          ],
+          "den": [
+            {
+              "t": "char",
+              "v": "h"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 420,
+      "y": 520,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "T"
+        },
+        {
+          "t": "sub",
+          "sub": [
+            {
+              "t": "char",
+              "v": "s"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "unit",
+          "v": "°C"
+        }
+      ]
+    },
+    {
+      "type": "text",
+      "x": 40,
+      "y": 600,
+      "style": "heading1",
+      "text": "Tables, functions and plots"
+    },
+    {
+      "type": "text",
+      "x": 60,
+      "y": 640,
+      "style": "normal",
+      "text": "Table columns are vectors on the sheet; functions and data plot together."
+    },
+    {
+      "type": "table",
+      "x": 60,
+      "y": 680,
+      "name": "T1",
+      "title": "Measured decay",
+      "headers": [
+        "x_m",
+        "y_m"
+      ],
+      "cells": [
+        [
+          "0",
+          "2.1"
+        ],
+        [
+          "1",
+          "1.38"
+        ],
+        [
+          "2",
+          "1.06"
+        ],
+        [
+          "3",
+          "0.71"
+        ],
+        [
+          "4.5",
+          "0.47"
+        ]
+      ]
+    },
+    {
+      "type": "math",
+      "x": 200,
+      "y": 690,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "f"
+        },
+        {
+          "t": "paren",
+          "in": [
+            {
+              "t": "char",
+              "v": "x"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        },
+        {
+          "t": "char",
+          "v": "2"
+        },
+        {
+          "t": "char",
+          "v": "·"
+        },
+        {
+          "t": "char",
+          "v": "e"
+        },
+        {
+          "t": "sup",
+          "exp": [
+            {
+              "t": "char",
+              "v": "-"
+            },
+            {
+              "t": "frac",
+              "num": [
+                {
+                  "t": "char",
+                  "v": "x"
+                }
+              ],
+              "den": [
+                {
+                  "t": "char",
+                  "v": "3"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 200,
+      "y": 750,
+      "decimals": null,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "m"
+        },
+        {
+          "t": "char",
+          "v": "e"
+        },
+        {
+          "t": "char",
+          "v": "a"
+        },
+        {
+          "t": "char",
+          "v": "n"
+        },
+        {
+          "t": "paren",
+          "in": [
+            {
+              "t": "char",
+              "v": "y"
+            },
+            {
+              "t": "sub",
+              "sub": [
+                {
+                  "t": "char",
+                  "v": "m"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        }
+      ]
+    },
+    {
+      "type": "math",
+      "x": 200,
+      "y": 810,
+      "decimals": 3,
+      "boxed": false,
+      "ast": [
+        {
+          "t": "char",
+          "v": "f"
+        },
+        {
+          "t": "paren",
+          "in": [
+            {
+              "t": "char",
+              "v": "2"
+            },
+            {
+              "t": "char",
+              "v": "."
+            },
+            {
+              "t": "char",
+              "v": "5"
+            }
+          ]
+        },
+        {
+          "t": "char",
+          "v": "="
+        }
+      ]
+    },
+    {
+      "type": "plot",
+      "x": 414,
+      "y": 678,
+      "width": 340,
+      "height": 200,
+      "title": "Model and measured data",
+      "func_expr": "f",
+      "discrete_data": "x_m, y_m",
+      "symbol_style": "circle",
+      "series_styles": {},
+      "connect_discrete": false,
+      "x_min": 0.0,
+      "x_max": 5.0,
+      "y_min": 0.0,
+      "y_max": 2.5,
+      "x_scale": "linear",
+      "y_scale": "linear",
+      "show_grid": true,
+      "show_legend": true,
+      "x_title": "x",
+      "y_title": "y"
+    },
+    {
+      "type": "text",
+      "x": 40,
+      "y": 930,
+      "style": "heading1",
+      "text": "Drawings and tools"
+    },
+    {
+      "type": "drawing",
+      "x": 60,
+      "y": 970,
+      "width": 270,
+      "height": 112,
+      "title": "Thermal resistance network",
+      "shapes": [
+        {
+          "type": "line",
+          "x1": 22.0,
+          "y1": 50.0,
+          "x2": 45.0,
+          "y2": 50.0,
+          "color": "auto",
+          "width": 1.8
+        },
+        {
+          "type": "resistor",
+          "x1": 45.0,
+          "y1": 50.0,
+          "x2": 135.0,
+          "y2": 50.0,
+          "color": "auto",
+          "width": 1.8
+        },
+        {
+          "type": "resistor",
+          "x1": 135.0,
+          "y1": 50.0,
+          "x2": 225.0,
+          "y2": 50.0,
+          "color": "auto",
+          "width": 1.8
+        },
+        {
+          "type": "line",
+          "x1": 225.0,
+          "y1": 50.0,
+          "x2": 248.0,
+          "y2": 50.0,
+          "color": "auto",
+          "width": 1.8
+        },
+        {
+          "type": "ellipse",
+          "x1": 15.0,
+          "y1": 43.0,
+          "x2": 29.0,
+          "y2": 57.0,
+          "color": "none",
+          "width": 1.8,
+          "fill": "red"
+        },
+        {
+          "type": "ellipse",
+          "x1": 241.0,
+          "y1": 43.0,
+          "x2": 255.0,
+          "y2": 57.0,
+          "color": "none",
+          "width": 1.8,
+          "fill": "blue"
+        },
+        {
+          "type": "text",
+          "x1": 70.0,
+          "y1": 16.0,
+          "text": "R₁ cond.",
+          "color": "auto",
+          "width": 1.8
+        },
+        {
+          "type": "text",
+          "x1": 160.0,
+          "y1": 16.0,
+          "text": "R₂ conv.",
+          "color": "auto",
+          "width": 1.8
+        },
+        {
+          "type": "text",
+          "x1": 12.0,
+          "y1": 64.0,
+          "text": "Tₛ",
+          "color": "red",
+          "width": 1.8
+        },
+        {
+          "type": "text",
+          "x1": 238.0,
+          "y1": 64.0,
+          "text": "Tₐ",
+          "color": "blue",
+          "width": 1.8
+        },
+        {
+          "type": "arrow",
+          "x1": 75.0,
+          "y1": 88.0,
+          "x2": 195.0,
+          "y2": 88.0,
+          "color": "orange",
+          "width": 1.8,
+          "head": "filled"
+        },
+        {
+          "type": "text",
+          "x1": 128.0,
+          "y1": 92.0,
+          "text": "q",
+          "color": "orange",
+          "width": 1.8
+        }
+      ],
+      "background": true
+    },
+    {
+      "type": "text",
+      "x": 370,
+      "y": 970,
+      "style": "normal",
+      "text": "Tools: Curve Fit · Unit Converter · Fluid Properties\nThermal Spreading · Contact · Plot Digitizer\nAuto-numbered headings, figures and tables\nContents pane · notes · links · undo · dark theme\nVector PDF export of the whole worksheet"
+    }
+  ]
+}
