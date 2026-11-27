@@ -1,7 +1,7 @@
 <h1 align="center">CommentariuM</h1>
 
 <p align="center">
-  <img src="docs/banner.png" alt="CommentariuM — A4 mathematical notebook for engineering calculations">
+  <img src="banner.png" alt="CommentariuM — A4 mathematical notebook for engineering calculations">
 </p>
 
 <p align="center">
