@@ -1,12 +1,5 @@
-<h1 align="center">CommentariuM</h1>
-
 <p align="center">
   <img src="banner.png" alt="CommentariuM — A4 mathematical notebook for engineering calculations">
-</p>
-
-<p align="center">
-  An A4 mathematical notebook for engineering calculations: live math, units, a symbolic solver,
-  tables, plots and drawings on graph paper, exported to vector PDF.
 </p>
 
 ---
