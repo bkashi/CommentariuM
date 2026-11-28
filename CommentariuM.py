@@ -514,15 +514,21 @@ class MathRenderer:
         elif isinstance(node, SupNode):
             sub_scale = max(0.62, scale * 0.72)
             cls.measure_seq(pango_ctx, node.exp, sub_scale)
-            base_asc = prev_item.ascent if prev_item is not None else 12.0 * scale
+            # x₀²: a superscript right after a subscript sits above it (same column)
+            stacked = isinstance(prev_item, SubNode)
+            base_asc = (getattr(prev_item, "_base_asc", 12.0 * scale) if stacked else
+                        prev_item.ascent if prev_item is not None else 12.0 * scale)
             shift_up = max(6.0 * scale, base_asc * 0.55)
-            node.width = node.exp.width + 2.0 * scale
+            node._shift_up = shift_up
+            node._stack_back = prev_item.width if stacked else 0.0
+            node.width = max(0.0, node.exp.width + 2.0 * scale - node._stack_back)
             node.ascent = shift_up + node.exp.ascent
             node.descent = max(0.0, node.exp.descent - shift_up)
 
         elif isinstance(node, SubNode):
             sub_scale = max(0.62, scale * 0.72)
             cls.measure_seq(pango_ctx, node.sub, sub_scale)
+            node._base_asc = prev_item.ascent if prev_item is not None else 12.0 * scale
             base_desc = prev_item.descent if prev_item is not None else 3.0 * scale
             shift_down = max(5.0 * scale, base_desc + 4.0 * scale)
             node.width = node.sub.width + 2.0 * scale
@@ -707,9 +713,13 @@ class MathRenderer:
             cls.draw_seq(cr, pango_ctx, node.den, den_x, den_baseline, theme)
 
         elif isinstance(node, SupNode):
-            base_asc = prev_item.ascent if prev_item is not None else 12.0 * scale
-            shift_up = max(6.0 * scale, base_asc * 0.55)
-            cls.draw_seq(cr, pango_ctx, node.exp, x + 1.0 * scale, baseline_y - shift_up, theme)
+            back = getattr(node, "_stack_back", 0.0)
+            shift_up = getattr(node, "_shift_up", None)
+            if shift_up is None:
+                base_asc = prev_item.ascent if prev_item is not None else 12.0 * scale
+                shift_up = max(6.0 * scale, base_asc * 0.55)
+            node.abs_x = x - back
+            cls.draw_seq(cr, pango_ctx, node.exp, x - back + 1.0 * scale, baseline_y - shift_up, theme)
 
         elif isinstance(node, SubNode):
             base_desc = prev_item.descent if prev_item is not None else 3.0 * scale
@@ -3559,15 +3569,40 @@ class MathBox(Gtk.DrawingArea):
         self._after_edit()
 
     def insert_superscript(self):
+        seq, idx = self.cursor_seq, self.cursor_idx
+        # '^' at the end of a subscript (x_0|) leaves it: x₀² with the 2 above the 0
+        pn = getattr(seq, "parent_node", None)
+        if isinstance(pn, SubNode) and seq.items and pn.parent_seq is not None:
+            seq = pn.parent_seq
+            idx = seq.items.index(pn) + 1
+            if idx < len(seq.items) and isinstance(seq.items[idx], SupNode):
+                self.cursor_seq, self.cursor_idx = seq.items[idx].exp, len(seq.items[idx].exp.items)
+                self._after_edit()
+                return
         sup = SupNode()
-        self.cursor_seq.insert(self.cursor_idx, sup)
+        seq.insert(idx, sup)
         self.cursor_seq = sup.exp
         self.cursor_idx = 0
         self._after_edit()
 
     def insert_subscript(self):
+        seq, idx = self.cursor_seq, self.cursor_idx
+        # '_' right after a power (x²|) goes under it: the subscript belongs to the name (x₀²)
+        if idx > 0 and isinstance(seq.items[idx - 1], SupNode) and not (
+                idx > 1 and isinstance(seq.items[idx - 2], SubNode)):
+            idx -= 1
         sub = SubNode()
-        self.cursor_seq.insert(self.cursor_idx, sub)
+        seq.insert(idx, sub)
+        self.cursor_seq = sub.sub
+        self.cursor_idx = 0
+        self._after_edit()
+
+    def insert_sub_superscript(self):
+        """x₀²: a subscript with a superscript above it; the cursor goes to the subscript."""
+        seq, idx = self.cursor_seq, self.cursor_idx
+        sub, sup = SubNode(), SupNode()
+        seq.insert(idx, sub)
+        seq.insert(idx + 1, sup)
         self.cursor_seq = sub.sub
         self.cursor_idx = 0
         self._after_edit()
@@ -3638,7 +3673,12 @@ class MathBox(Gtk.DrawingArea):
             parent_node = self.cursor_seq.parent_node
             slots = parent_node.slots()
             s_idx = slots.index(self.cursor_seq)
-            if s_idx > 0:
+            pseq = parent_node.parent_seq
+            pi = pseq.items.index(parent_node) if pseq is not None and parent_node in pseq.items else -1
+            if isinstance(parent_node, SupNode) and pi > 0 and isinstance(pseq.items[pi - 1], SubNode):
+                self.cursor_seq = pseq.items[pi - 1].sub
+                self.cursor_idx = len(self.cursor_seq.items)
+            elif s_idx > 0:
                 self.cursor_seq = slots[s_idx - 1]
                 self.cursor_idx = len(self.cursor_seq.items)
             else:
@@ -3660,7 +3700,10 @@ class MathBox(Gtk.DrawingArea):
             parent_node = self.cursor_seq.parent_node
             slots = parent_node.slots()
             s_idx = slots.index(self.cursor_seq)
-            if s_idx + 1 < len(slots):
+            sup = self._stacked_sup_after(parent_node)
+            if sup is not None:
+                self.cursor_seq, self.cursor_idx = sup.exp, 0
+            elif s_idx + 1 < len(slots):
                 self.cursor_seq = slots[s_idx + 1]
                 self.cursor_idx = 0
             else:
@@ -3669,10 +3712,30 @@ class MathBox(Gtk.DrawingArea):
                 self.cursor_seq = parent_seq
         self.queue_draw()
 
-    def step_out_slot(self):
-        """Step out of the current 2D construct (Space / Tab), like SMath & MS Equation."""
+    @staticmethod
+    def _stacked_sup_after(sub_node):
+        """The superscript drawn above this subscript (x₀²), or None."""
+        seq = getattr(sub_node, "parent_seq", None)
+        if not isinstance(sub_node, SubNode) or seq is None or sub_node not in seq.items:
+            return None
+        i = seq.items.index(sub_node) + 1
+        return seq.items[i] if i < len(seq.items) and isinstance(seq.items[i], SupNode) else None
+
+    def step_out_slot(self, into_next=True):
+        """Step out of the current 2D construct (Space / Tab), like SMath & MS Equation.
+        From the subscript of x₀², Space / Tab go on to an empty superscript; typing an
+        operator (into_next=False) or a filled superscript jumps past the whole x₀²."""
         if self.cursor_seq.parent_node is not None:
             parent_node = self.cursor_seq.parent_node
+            sup = self._stacked_sup_after(parent_node)
+            if sup is not None:
+                if into_next and not sup.exp.items:
+                    self.cursor_seq, self.cursor_idx = sup.exp, 0
+                else:
+                    self.cursor_seq = parent_node.parent_seq
+                    self.cursor_idx = self.cursor_seq.items.index(sup) + 1
+                self.queue_draw()
+                return
             slots = parent_node.slots()
             s_idx = slots.index(self.cursor_seq)
             if s_idx + 1 < len(slots):
@@ -3884,8 +3947,8 @@ class MathBox(Gtk.DrawingArea):
 
         # Auto-step-out of SubNode on any operator or delimiter
         if isinstance(self.cursor_seq.parent_node, SubNode) and len(self.cursor_seq.items) > 0:
-            if ch in ("+", "-", "*", "/", "^", "(", ")", ":", "=", ",", ";"):
-                self.step_out_slot()
+            if ch in ("+", "-", "*", "/", "(", ")", ":", "=", ",", ";"):
+                self.step_out_slot(into_next=False)
 
         # Auto-step-out of SupNode when typing '+', '-', ',', ';' after at least 1 token (so x^2+a -> x² + a)
         if isinstance(self.cursor_seq.parent_node, SupNode) and len(self.cursor_seq.items) > 0:
@@ -5683,6 +5746,65 @@ gi.require_version("GdkPixbuf", "2.0")
 from gi.repository import GdkPixbuf
 
 
+TRANSPARENT_TOL = 24  # per-channel tolerance (0–255) for "Set Transparent Color"
+
+
+def pixbuf_pixel_rgb(pb, x: int, y: int):
+    """(r, g, b) of one pixel of a pixbuf, or None outside it."""
+    if pb is None:
+        return None
+    w, h = pb.get_width(), pb.get_height()
+    x, y = int(x), int(y)
+    if not (0 <= x < w and 0 <= y < h):
+        return None
+    data = pb.read_pixel_bytes().get_data()
+    i = y * pb.get_rowstride() + x * pb.get_n_channels()
+    return (data[i], data[i + 1], data[i + 2])
+
+
+def make_color_transparent(pb, rgb, tol: int = TRANSPARENT_TOL):
+    """Copy of the pixbuf in which every pixel close to rgb (within tol on each channel)
+    is fully transparent, like PowerPoint's Set Transparent Color (with a tolerance, so
+    the near-white speckles of JPEGs and screenshots go too). The original is unchanged."""
+    if pb is None or not rgb:
+        return pb
+    r, g, b = (int(v) for v in rgb[:3])
+    try:
+        import numpy as np
+        src = pb if pb.get_has_alpha() else pb.add_alpha(False, 0, 0, 0)
+        w, h, rs = src.get_width(), src.get_height(), src.get_rowstride()
+        data = src.read_pixel_bytes().get_data()
+        data = data + bytes(rs * h - len(data))
+        arr = np.frombuffer(data, np.uint8).reshape(h, rs)[:, :w * 4].reshape(h, w, 4).copy()
+        diff = np.abs(arr[..., :3].astype(np.int16) - np.array([r, g, b], np.int16))
+        arr[(diff <= int(tol)).all(axis=-1), 3] = 0
+        return GdkPixbuf.Pixbuf.new_from_bytes(
+            GLib.Bytes.new(arr.tobytes()), GdkPixbuf.Colorspace.RGB, True, 8, w, h, w * 4)
+    except Exception:
+        try:
+            return pb.add_alpha(True, r, g, b)  # exact colour only
+        except Exception:
+            return pb
+
+
+PICK_COLOR_HINT = "Click the colour to make transparent  (Esc cancels)"
+
+
+def draw_pick_hint(widget, cr, width, x0=0.0, y0=0.0):
+    """Dark badge with the transparent-colour picking hint, at the top of a picture/drawing."""
+    lay, tw, ta, td = MathRenderer._make_layout(widget.get_pango_context(), PICK_COLOR_HINT, 0.62, bold=True)
+    bw = min(width - 8, tw + 14)
+    cr.save()
+    cr.translate(x0, y0)
+    cr.set_source_rgba(0.1, 0.12, 0.16, 0.85)
+    cr.rectangle(4, 4, bw, ta + td + 8)
+    cr.fill()
+    cr.set_source_rgb(0.95, 0.97, 1.0)
+    cr.move_to(11, 8)
+    PangoCairo.show_layout(cr, lay)
+    cr.restore()
+
+
 class ImageBox(Gtk.DrawingArea):
     """
     Picture / Image box on the A4 worksheet.
@@ -5694,10 +5816,14 @@ class ImageBox(Gtk.DrawingArea):
     CAPTION_HEIGHT = 28
     HANDLE_SIZE = 10
 
-    def __init__(self, canvas, x, y, pixbuf: GdkPixbuf.Pixbuf, title="", width=None, height=None):
+    def __init__(self, canvas, x, y, pixbuf: GdkPixbuf.Pixbuf, title="", width=None, height=None,
+                 transparent=None):
         super().__init__()
         self.canvas = canvas
         self.orig_pixbuf = pixbuf
+        self.transparent = tuple(int(v) for v in transparent[:3]) if transparent else None
+        self.picking_color = False
+        self._transp_cache = None
         orig_w = max(1, pixbuf.get_width())
         orig_h = max(1, pixbuf.get_height())
         self.aspect = orig_w / float(orig_h)
@@ -5786,7 +5912,7 @@ class ImageBox(Gtk.DrawingArea):
         self.box_h = self.img_h + 8 + extra_h
         self.logical_w = self.box_w
         self.logical_h = self.box_h
-        self._scaled_cache = self.orig_pixbuf.scale_simple(
+        self._scaled_cache = self.display_pixbuf().scale_simple(
             max(1, self.img_w), max(1, self.img_h), GdkPixbuf.InterpType.BILINEAR
         )
         z = getattr(self.canvas, "zoom", 1.0)
@@ -5798,6 +5924,34 @@ class ImageBox(Gtk.DrawingArea):
 
     def _update_size_request(self):
         self.update_layout()
+
+    def display_pixbuf(self):
+        """The picture as shown: the original, with the transparent colour removed if one is set."""
+        if not self.transparent:
+            return self.orig_pixbuf
+        key = (id(self.orig_pixbuf), self.transparent)
+        if self._transp_cache is None or self._transp_cache[0] != key:
+            self._transp_cache = (key, make_color_transparent(self.orig_pixbuf, self.transparent))
+        return self._transp_cache[1]
+
+    def set_transparent_color(self, rgb):
+        self.transparent = tuple(int(v) for v in rgb[:3]) if rgb else None
+        self.update_layout()
+        cp = getattr(self.canvas, "undo_checkpoint", None)
+        if callable(cp):
+            cp()
+
+    def start_pick_transparent(self):
+        self.picking_color = True
+        self.canvas.select_box(self)
+        self.canvas.focus_without_scroll(self)
+        self._set_cursor_by_name("crosshair")
+        self.queue_draw()
+
+    def _cancel_pick(self):
+        self.picking_color = False
+        self._set_cursor_by_name(None)
+        self.queue_draw()
 
     def is_empty(self):
         return False
@@ -5864,6 +6018,10 @@ class ImageBox(Gtk.DrawingArea):
         if for_export:
             return
 
+        if self.picking_color:
+            draw_pick_hint(self, cr, w)
+            return
+
         if self.selected or self.resizing_mode is not None:
             cr.save()
             cr.set_source_rgb(*theme["box_selected_border"])
@@ -5919,6 +6077,20 @@ class ImageBox(Gtk.DrawingArea):
         return True
 
     def on_button_press(self, widget, event):
+        if self.picking_color:
+            if event.button == 1 and event.type == Gdk.EventType.BUTTON_PRESS:
+                z = getattr(self.canvas, "zoom", 1.0)
+                lx, ly = event.x / z, event.y / z
+                pb = self.orig_pixbuf
+                px = (lx - 4) * pb.get_width() / max(1.0, self.img_w)
+                py = (ly - 4) * pb.get_height() / max(1.0, self.img_h)
+                rgb = pixbuf_pixel_rgb(pb, px, py)
+                self._cancel_pick()
+                if rgb is not None:
+                    self.set_transparent_color(rgb)
+            elif event.button == 3:
+                self._cancel_pick()
+            return True
         if event.button == 1:
             z = getattr(self.canvas, "zoom", 1.0)
             lx, ly = event.x / z, event.y / z
@@ -5965,8 +6137,13 @@ class ImageBox(Gtk.DrawingArea):
             ("Picture Options & Size…", lambda: GLib.idle_add(self._open_config_dialog_idle)),
             ("Caption…", lambda: GLib.idle_add(lambda: open_figure_caption_dialog(self) and False)),
             (None, None),
+            ("Set Transparent Color", self.start_pick_transparent),
+            ("Remove Transparency" if self.transparent else None, lambda: self.set_transparent_color(None)),
+            (None, None),
             ("Delete Picture", lambda: self.canvas.remove_selected_boxes(self)),
         ):
+            if label is None and cb is not None:
+                continue
             if label is None:
                 menu.append(Gtk.SeparatorMenuItem())
                 continue
@@ -5985,6 +6162,9 @@ class ImageBox(Gtk.DrawingArea):
     def on_motion_notify(self, widget, event):
         z = getattr(self.canvas, "zoom", 1.0)
         lx, ly = event.x / z, event.y / z
+        if self.picking_color:
+            self._set_cursor_by_name("crosshair")
+            return True
 
         if self.resizing_mode is not None:
             if not (event.state & Gdk.ModifierType.BUTTON1_MASK):
@@ -6040,7 +6220,7 @@ class ImageBox(Gtk.DrawingArea):
         return False
 
     def on_leave_notify(self, widget, event):
-        if self.resizing_mode is None:
+        if self.resizing_mode is None and not self.picking_color:
             self._set_cursor_by_name(None)
         return False
 
@@ -6059,6 +6239,9 @@ class ImageBox(Gtk.DrawingArea):
 
     def on_key_press(self, widget, event):
         keyname = Gdk.keyval_name(event.keyval)
+        if self.picking_color and keyname == "Escape":
+            self._cancel_pick()
+            return True
         if keyname in ("Delete", "BackSpace"):
             self.canvas.remove_selected_boxes(self)
             return True
@@ -6595,6 +6778,7 @@ class DrawingBox(Gtk.DrawingArea):
         self.update_layout()
 
     def stop_editing(self):
+        self._pick_shape = None
         if not self.editing:
             return
         self.editing = False
@@ -7042,6 +7226,21 @@ class DrawingBox(Gtk.DrawingArea):
         cr.restore()
 
     def _image_pixbuf(self, s):
+        """Picture of an image shape as shown: decoded, with its transparent colour removed."""
+        pb = self._image_pixbuf_raw(s)
+        tr = s.get("transparent")
+        if pb is None or not tr:
+            return pb
+        key = (s.get("png", ""), tuple(int(v) for v in tr[:3]))
+        cache = self.__dict__.setdefault("_img_transp_cache", {})
+        out = cache.get(key)
+        if out is None:
+            if len(cache) > 16:
+                cache.clear()
+            out = cache[key] = make_color_transparent(pb, key[1])
+        return out
+
+    def _image_pixbuf_raw(self, s):
         """Decoded picture of an image shape (cached by its data)."""
         data = s.get("png", "")
         cache = self.__dict__.setdefault("_img_cache", {})
@@ -7314,6 +7513,61 @@ class DrawingBox(Gtk.DrawingArea):
                 cr.fill()
             cr.restore()
             draw_figure_caption_button(self, cr, theme)
+        if self._pick_shape_index() is not None and not for_export:
+            draw_pick_hint(self, cr, self.draw_w, P, P)
+
+    # ---- transparent colour of pictures in the drawing ---------------------------
+
+    def _selected_image_index(self):
+        i = self.sel_shape
+        if i is not None and 0 <= i < len(self.shapes) and self.shapes[i].get("type") == "image":
+            return i
+        return None
+
+    def _pick_shape_index(self):
+        i = getattr(self, "_pick_shape", None)
+        if i is not None and 0 <= i < len(self.shapes) and self.shapes[i].get("type") == "image":
+            return i
+        return None
+
+    def start_pick_transparent(self):
+        i = self._selected_image_index()
+        if i is None:
+            return
+        self._pick_shape = i
+        self._set_cursor_by_name("crosshair")
+        self.queue_draw()
+
+    def _cancel_pick(self):
+        self._pick_shape = None
+        self._set_cursor_by_name(None)
+        self.queue_draw()
+
+    def set_shape_transparent(self, i, rgb):
+        if i is None or not (0 <= i < len(self.shapes)):
+            return
+        if rgb:
+            self.shapes[i]["transparent"] = [int(v) for v in rgb[:3]]
+        else:
+            self.shapes[i].pop("transparent", None)
+        self.queue_draw()
+
+    def _image_point_rgb(self, s, ax, ay):
+        """Colour of the original picture of image shape s under drawing point (ax, ay)."""
+        pb = self._image_pixbuf_raw(s)
+        if pb is None:
+            return None
+        x0, y0, x1, y1 = self._bbox(s)
+        bw, bh = x1 - x0, y1 - y0
+        if bw < 1 or bh < 1:
+            return None
+        rot = int(s.get("rot", 0)) % 360
+        sw, sh = (bh, bw) if rot in (90, 270) else (bw, bh)
+        a = math.radians(-rot)
+        dx, dy = ax - (x0 + x1) / 2.0, ay - (y0 + y1) / 2.0
+        ux, uy = dx * math.cos(a) - dy * math.sin(a), dx * math.sin(a) + dy * math.cos(a)
+        iw, ih = pb.get_width(), pb.get_height()
+        return pixbuf_pixel_rgb(pb, (ux / sw + 0.5) * iw, (uy / sh + 0.5) * ih)
 
     def on_draw(self, widget, cr):
         z = getattr(self.canvas, "zoom", 1.0)
@@ -7402,7 +7656,9 @@ class DrawingBox(Gtk.DrawingArea):
             hdr.set_sensitive(False)
             menu.append(hdr)
             for lbl, cb in (("🖼 Paste Picture  (Ctrl+V)", self.paste_picture),
-                            ("🖼 Picture from File…", self.insert_picture_from_file)):
+                            ("🖼 Picture from File…", self.insert_picture_from_file)) + (
+                               (("Set Transparent Color of Picture", self.start_pick_transparent),)
+                               if sel is not None and sel.get("type") == "image" else ()):
                 mi = Gtk.MenuItem(label=lbl)
                 mi.connect("activate", lambda _w, f=cb: GLib.idle_add(lambda: (f(), False)[1]))
                 menu.append(mi)
@@ -7646,6 +7902,9 @@ class DrawingBox(Gtk.DrawingArea):
     def on_button_press(self, widget, event):
         z = getattr(self.canvas, "zoom", 1.0)
         lx, ly = event.x / z, event.y / z
+        if event.button == 3 and self._pick_shape_index() is not None:
+            self._cancel_pick()
+            return True
         if event.button == 3:
             if self not in self.canvas.selected_boxes:
                 self.canvas.select_box(self)
@@ -7690,6 +7949,14 @@ class DrawingBox(Gtk.DrawingArea):
 
         # ---- editing mode ----
         self.canvas.focus_without_scroll(self)
+        pick = self._pick_shape_index()
+        if pick is not None:
+            if event.type == Gdk.EventType.BUTTON_PRESS:
+                rgb = self._image_point_rgb(self.shapes[pick], lx - self.PAD, ly - self.PAD)
+                self._cancel_pick()
+                if rgb is not None:
+                    self.set_shape_transparent(pick, rgb)
+            return True
         for key, _lbl, (bx, by, bw, bh) in self._strip_buttons:
             if bx <= lx <= bx + bw and by <= ly <= by + bh:
                 if event.type == Gdk.EventType.BUTTON_PRESS:
@@ -7929,6 +8196,9 @@ class DrawingBox(Gtk.DrawingArea):
             return True
 
         # hover cursors
+        if self._pick_shape_index() is not None:
+            self._set_cursor_by_name("crosshair")
+            return False
         crop_hover = self._hit_crop_edge(lx, ly) if (not self.editing and self.selected) else None
         if not self.editing and self.selected and self._hit_box_resize(lx, ly):
             self._set_cursor_by_name("nwse-resize")
@@ -8011,6 +8281,9 @@ class DrawingBox(Gtk.DrawingArea):
         if keyname in ("Delete", "BackSpace"):
             self._delete_selected_shape()
             return True
+        if keyname == "Escape" and self._pick_shape_index() is not None:
+            self._cancel_pick()
+            return True
         if keyname == "Escape":
             if self.tool != "select":
                 self.tool = "select"  # drop the chosen tool, back to selecting shapes
@@ -8058,6 +8331,12 @@ class DrawingBox(Gtk.DrawingArea):
             add("Cut Shape  (Ctrl+X)", self.cut_shape, has_sel)
             add("Paste Shape  (Ctrl+V)", self.paste_shapes, bool(_DRAW_CLIPBOARD["shapes"]))
             add("Duplicate Shape  (Ctrl+D)", self.duplicate_shape, has_sel)
+            img_i = self._selected_image_index()
+            if img_i is not None:
+                menu.append(Gtk.SeparatorMenuItem())
+                add("Set Transparent Color (picture)", self.start_pick_transparent)
+                if self.shapes[img_i].get("transparent"):
+                    add("Remove Transparency (picture)", lambda: self.set_shape_transparent(img_i, None))
             menu.append(Gtk.SeparatorMenuItem())
             add("Rotate Shape 90°  (R; Shift+R the other way)", lambda: self._rotate_selected(90), has_sel)
             add("Bring Shape to Front", self._shape_to_front, has_sel)
@@ -10822,12 +11101,14 @@ class MathCanvas(Gtk.ScrolledWindow):
             self._make_room(pbox)
         return pbox
 
-    def create_image_box(self, pixbuf: GdkPixbuf.Pixbuf, x=None, y=None, title="", width=None, height=None) -> ImageBox:
+    def create_image_box(self, pixbuf: GdkPixbuf.Pixbuf, x=None, y=None, title="", width=None, height=None,
+                         transparent=None) -> ImageBox:
         at_cursor = y is None
         if at_cursor:
             y = self._take_insert_point()[1]
         snap_y = max(10, round(y / 10) * 10)
-        ibox = ImageBox(self, 0, snap_y, pixbuf=pixbuf, title=title, width=width, height=height)
+        ibox = ImageBox(self, 0, snap_y, pixbuf=pixbuf, title=title, width=width, height=height,
+                        transparent=transparent)
         self.ensure_page_for_y(snap_y + ibox.box_h + 20)
         ibox.x = max(0, (self.A4_WIDTH - ibox.box_w) // 2) if x is None else int(x)
         self.boxes.append(ibox)
@@ -11567,6 +11848,7 @@ class MathCanvas(Gtk.ScrolledWindow):
                     "height": b.img_h,
                     "title": b.title,
                     "png_b64": b64_png,
+                    **({"transparent": list(b.transparent)} if b.transparent else {}),
                 })
         return {
             "version": 1,
@@ -11677,6 +11959,7 @@ class MathCanvas(Gtk.ScrolledWindow):
                                 title=item.get("title", ""),
                                 width=item.get("width"),
                                 height=item.get("height"),
+                                transparent=item.get("transparent"),
                             )
                     except Exception:
                         pass
@@ -13578,6 +13861,8 @@ class SymbolsPane(Gtk.Box):
                 ("a/b", "Fraction (/)", lambda: self.canvas.get_active_or_new_box().insert_fraction()),
                 ("xⁿ", "Superscript (^)", lambda: self.canvas.get_active_or_new_box().insert_superscript()),
                 ("xₙ", "Subscript (_)", lambda: self.canvas.get_active_or_new_box().insert_subscript()),
+                ("xₙᵐ", "Subscript and superscript (x_0^2)",
+                 lambda: self.canvas.get_active_or_new_box().insert_sub_superscript()),
                 ("√x", "Square Root (\\)", lambda: self.canvas.get_active_or_new_box().insert_sqrt()),
                 ("ⁿ√x", "N-th Root", lambda: self.canvas.get_active_or_new_box().insert_nth_root()),
                 ("( )", "Parentheses", lambda: self.canvas.get_active_or_new_box().insert_parens()),
@@ -13750,34 +14035,33 @@ COMMENTARIUM_LOGO_SVG_B64 = (
     'LWNvbG9yPSIjZmJiZjI0Ii8+CiAgICAgIDxzdG9wIG9mZnNldD0iMTAwJSIgc3RvcC1jb2xvcj0i'
     'I2Q5NzcwNiIvPgogICAgPC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CgogIDwhLS0gT3V0ZXIg'
     'Um91bmRlZCBCYWRnZSAtLT4KICA8cmVjdCB4PSI2IiB5PSI2IiB3aWR0aD0iMTE2IiBoZWlnaHQ9'
-    'IjExNiIgcng9IjI0IiBmaWxsPSJ1cmwoI2JnR3JhZCkiIHN0cm9rZT0iIzM4YmRmOCIgc3Ryb2tl'
-    'LXdpZHRoPSIzLjUiLz4KCiAgPCEtLSBOb3RlYm9vayBTcGluZSAvIFNoYWRvdyAtLT4KICA8cmVj'
-    'dCB4PSIyNCIgeT0iMTgiIHdpZHRoPSI4MCIgaGVpZ2h0PSI5NCIgcng9IjYiIGZpbGw9IiMwOTBk'
-    'MTYiIG9wYWNpdHk9IjAuNDUiLz4KCiAgPCEtLSBBNCBHcmFwaCBQYXBlciBTaGVldCB3aXRoIEZv'
-    'bGRlZCBUb3AtUmlnaHQgQ29ybmVyIC0tPgogIDxwYXRoIGQ9Ik0gMjQgMTYgTCA4NCAxNiBMIDEw'
-    'NCAzNiBMIDEwNCAxMTAgQyAxMDQgMTEyLjIgMTAyLjIgMTE0IDEwMCAxMTQgTCAyOCAxMTQgQyAy'
-    'NS44IDExNCAyNCAxMTIuMiAyNCAxMTAgWiIgZmlsbD0idXJsKCNwYWdlR3JhZCkiLz4KICA8cGF0'
-    'aCBkPSJNIDg0IDE2IEwgODQgMzYgTCAxMDQgMzYgWiIgZmlsbD0iI2NiZDVlMSIvPgoKICA8IS0t'
-    'IFN1YnRsZSBFbmdpbmVlcmluZyBHcmFwaCBHcmlkIG9uIFNoZWV0IC0tPgogIDxnIHN0cm9rZT0i'
-    'Izk0YTNiOCIgc3Ryb2tlLXdpZHRoPSIxIiBvcGFjaXR5PSIwLjQ1Ij4KICAgIDxsaW5lIHgxPSI0'
-    'MCIgeTE9IjE2IiB4Mj0iNDAiIHkyPSIxMTQiLz4KICAgIDxsaW5lIHgxPSI1NiIgeTE9IjE2IiB4'
-    'Mj0iNTYiIHkyPSIxMTQiLz4KICAgIDxsaW5lIHgxPSI3MiIgeTE9IjE2IiB4Mj0iNzIiIHkyPSIx'
-    'MTQiLz4KICAgIDxsaW5lIHgxPSI4OCIgeTE9IjM2IiB4Mj0iODgiIHkyPSIxMTQiLz4KICAgIDxs'
-    'aW5lIHgxPSIyNCIgeTE9IjM2IiB4Mj0iMTA0IiB5Mj0iMzYiLz4KICAgIDxsaW5lIHgxPSIyNCIg'
-    'eTE9IjUyIiB4Mj0iMTA0IiB5Mj0iNTIiLz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9IjY4IiB4Mj0i'
-    'MTA0IiB5Mj0iNjgiLz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9Ijg0IiB4Mj0iMTA0IiB5Mj0iODQi'
-    'Lz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9IjEwMCIgeDI9IjEwNCIgeTI9IjEwMCIvPgogIDwvZz4K'
-    'CiAgPCEtLSBMZWZ0IE5vdGVib29rIE1hcmdpbiBMaW5lIC0tPgogIDxsaW5lIHgxPSIzNCIgeTE9'
-    'IjE2IiB4Mj0iMzQiIHkyPSIxMTQiIHN0cm9rZT0iI2VmNDQ0NCIgc3Ryb2tlLXdpZHRoPSIxLjYi'
-    'IG9wYWNpdHk9IjAuNjUiLz4KCiAgPCEtLSBNYXRoZW1hdGljYWwgQ3VydmUgb24gU2hlZXQgLS0+'
-    'CiAgPHBhdGggZD0iTSAzNiA5MiBRIDU0IDQ2LCA3MiA3MiBUIDk4IDQ4IiBmaWxsPSJub25lIiBz'
-    'dHJva2U9IiMwMjg0YzciIHN0cm9rZS13aWR0aD0iMy4yIiBzdHJva2UtbGluZWNhcD0icm91bmQi'
-    'Lz4KCiAgPCEtLSBDbGFzc2ljIEludGVncmFsIEVtYmxlbSAn4oirJyAtLT4KICA8dGV4dCB4PSI1'
-    'OCIgeT0iODgiIGZvbnQtZmFtaWx5PSJTZXJpZiIgZm9udC1zaXplPSI2MCIgZm9udC13ZWlnaHQ9'
-    'ImJvbGQiIGZvbnQtc3R5bGU9Iml0YWxpYyIgZmlsbD0iIzBmMTcyYSIgdGV4dC1hbmNob3I9Im1p'
-    'ZGRsZSI+4oirPC90ZXh0PgoKICA8IS0tIEdvbGQgQm9va21hcmsgLyBTZWFsIFJpYmJvbiAtLT4K'
-    'ICA8cGF0aCBkPSJNIDQwIDE2IEwgNTIgMTYgTCA1MiAzOCBMIDQ2IDMyIEwgNDAgMzggWiIgZmls'
-    'bD0idXJsKCNnb2xkR3JhZCkiLz4KPC9zdmc+Cg=='
+    'IjExNiIgcng9IjI0IiBmaWxsPSJ1cmwoI2JnR3JhZCkiLz4KCiAgPCEtLSBOb3RlYm9vayBTcGlu'
+    'ZSAvIFNoYWRvdyAtLT4KICA8cmVjdCB4PSIyNCIgeT0iMTgiIHdpZHRoPSI4MCIgaGVpZ2h0PSI5'
+    'NCIgcng9IjYiIGZpbGw9IiMwOTBkMTYiIG9wYWNpdHk9IjAuNDUiLz4KCiAgPCEtLSBBNCBHcmFw'
+    'aCBQYXBlciBTaGVldCB3aXRoIEZvbGRlZCBUb3AtUmlnaHQgQ29ybmVyIC0tPgogIDxwYXRoIGQ9'
+    'Ik0gMjQgMTYgTCA4NCAxNiBMIDEwNCAzNiBMIDEwNCAxMTAgQyAxMDQgMTEyLjIgMTAyLjIgMTE0'
+    'IDEwMCAxMTQgTCAyOCAxMTQgQyAyNS44IDExNCAyNCAxMTIuMiAyNCAxMTAgWiIgZmlsbD0idXJs'
+    'KCNwYWdlR3JhZCkiLz4KICA8cGF0aCBkPSJNIDg0IDE2IEwgODQgMzYgTCAxMDQgMzYgWiIgZmls'
+    'bD0iI2NiZDVlMSIvPgoKICA8IS0tIFN1YnRsZSBFbmdpbmVlcmluZyBHcmFwaCBHcmlkIG9uIFNo'
+    'ZWV0IC0tPgogIDxnIHN0cm9rZT0iIzk0YTNiOCIgc3Ryb2tlLXdpZHRoPSIxIiBvcGFjaXR5PSIw'
+    'LjQ1Ij4KICAgIDxsaW5lIHgxPSI0MCIgeTE9IjE2IiB4Mj0iNDAiIHkyPSIxMTQiLz4KICAgIDxs'
+    'aW5lIHgxPSI1NiIgeTE9IjE2IiB4Mj0iNTYiIHkyPSIxMTQiLz4KICAgIDxsaW5lIHgxPSI3MiIg'
+    'eTE9IjE2IiB4Mj0iNzIiIHkyPSIxMTQiLz4KICAgIDxsaW5lIHgxPSI4OCIgeTE9IjM2IiB4Mj0i'
+    'ODgiIHkyPSIxMTQiLz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9IjM2IiB4Mj0iMTA0IiB5Mj0iMzYi'
+    'Lz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9IjUyIiB4Mj0iMTA0IiB5Mj0iNTIiLz4KICAgIDxsaW5l'
+    'IHgxPSIyNCIgeTE9IjY4IiB4Mj0iMTA0IiB5Mj0iNjgiLz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9'
+    'Ijg0IiB4Mj0iMTA0IiB5Mj0iODQiLz4KICAgIDxsaW5lIHgxPSIyNCIgeTE9IjEwMCIgeDI9IjEw'
+    'NCIgeTI9IjEwMCIvPgogIDwvZz4KCiAgPCEtLSBMZWZ0IE5vdGVib29rIE1hcmdpbiBMaW5lIC0t'
+    'PgogIDxsaW5lIHgxPSIzNCIgeTE9IjE2IiB4Mj0iMzQiIHkyPSIxMTQiIHN0cm9rZT0iI2VmNDQ0'
+    'NCIgc3Ryb2tlLXdpZHRoPSIxLjYiIG9wYWNpdHk9IjAuNjUiLz4KCiAgPCEtLSBNYXRoZW1hdGlj'
+    'YWwgQ3VydmUgb24gU2hlZXQgLS0+CiAgPHBhdGggZD0iTSAzNiA5MiBRIDU0IDQ2LCA3MiA3MiBU'
+    'IDk4IDQ4IiBmaWxsPSJub25lIiBzdHJva2U9IiMwMjg0YzciIHN0cm9rZS13aWR0aD0iMy4yIiBz'
+    'dHJva2UtbGluZWNhcD0icm91bmQiLz4KCiAgPCEtLSBDbGFzc2ljIEludGVncmFsIEVtYmxlbSAn'
+    '4oirJyAtLT4KICA8dGV4dCB4PSI1OCIgeT0iODgiIGZvbnQtZmFtaWx5PSJTZXJpZiIgZm9udC1z'
+    'aXplPSI2MCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZvbnQtc3R5bGU9Iml0YWxpYyIgZmlsbD0iIzBm'
+    'MTcyYSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+4oirPC90ZXh0PgoKICA8IS0tIEdvbGQgQm9va21h'
+    'cmsgLyBTZWFsIFJpYmJvbiAtLT4KICA8cGF0aCBkPSJNIDQwIDE2IEwgNTIgMTYgTCA1MiAzOCBM'
+    'IDQ2IDMyIEwgNDAgMzggWiIgZmlsbD0idXJsKCNnb2xkR3JhZCkiLz4KPC9zdmc+Cg=='
 )
 
 
@@ -13802,10 +14086,7 @@ def render_commentarium_logo_pixbuf(size: int = 32) -> GdkPixbuf.Pixbuf:
     # Outer badge
     cr.set_source_rgb(0.10, 0.13, 0.20)
     cr.rectangle(8, 8, 112, 112)
-    cr.fill_preserve()
-    cr.set_source_rgb(0.22, 0.74, 0.97)
-    cr.set_line_width(4.0)
-    cr.stroke()
+    cr.fill()
 
     # Graph paper sheet
     cr.set_source_rgb(0.96, 0.97, 0.99)
@@ -14353,6 +14634,8 @@ class MainWindow(Gtk.Window):
         ]),
         ("Math", [
             "2D equation editor: fractions (/), powers (^), subscripts (_), roots (\\), Σ, ∫, vectors, dot above for time derivatives (ẋ)",
+            "Subscript and superscript together (x₀²): type x_0^2 (or x^2, → then _0); also the xₙᵐ button. "
+            "The power is drawn above the subscript",
             "One '=' defines (a = 5) or evaluates (a =); functions f(x) = x² + a",
             "Greek letters by name (alpha → α, kappa → κ …), results with chosen decimal places (right-click)",
             "Boxed equations, live recalculation of the whole sheet",
@@ -14397,6 +14680,8 @@ class MainWindow(Gtk.Window):
         ("Figures & Tables", [
             "2D plots of functions and data, with captions",
             "Pictures from the clipboard or files, resizable, with captions",
+            "Set Transparent Color (right-click a picture, or a picture in a drawing): click a colour and it "
+            "becomes see-through, with a small tolerance for JPEG noise; Remove Transparency undoes it",
             "Drawings made of simple shapes (lines, single- and double-headed arrows with filled or simple heads, rectangles, ellipses, triangles with movable corners, arcs with adjustable angle, text; three line thicknesses; optional white/black background), with captions",
             "Tables whose columns can be used in calculations (T1(2,3), mean(Re) …)",
             "Figures and tables numbered automatically",
